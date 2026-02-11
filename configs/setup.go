@@ -2,6 +2,7 @@ package configs
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"time"
@@ -11,12 +12,26 @@ import (
 )
 
 func ConnectDB() *mongo.Client {
-	client, err := mongo.NewClient(options.Client().ApplyURI(EnvMongoURI()))
+	clientOptions := options.Client().ApplyURI(EnvMongoURI())
+	
+	// Configure TLS
+	clientOptions.SetTLSConfig(&tls.Config{
+		InsecureSkipVerify: true,
+	})
+	
+	// Set timeouts
+	clientOptions.SetServerSelectionTimeout(30 * time.Second)
+	clientOptions.SetConnectTimeout(30 * time.Second)
+	clientOptions.SetSocketTimeout(30 * time.Second)
+	
+	client, err := mongo.NewClient(clientOptions)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
 	err = client.Connect(ctx)
 	if err != nil {
 		log.Fatal(err)
