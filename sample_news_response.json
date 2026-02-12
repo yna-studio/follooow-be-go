@@ -1,0 +1,27 @@
+{
+  "status": 200,
+  "message": "success",
+  "data": {
+    "news": [
+      {
+        "id": "62de435b358ec1156af984cb",
+        "title": "Sample News Article",
+        "thumbnail": "https://example.com/image.jpg",
+        "content": "This is the news content...",
+        "views": 150,
+        "created_on": 1658733023275,
+        "updated_on": 1658733023275,
+        "tags": ["technology", "programming"],
+        "influencers": [],
+        "influencers_data": [],
+        "slug": "sample-news-article",
+        "author_id": "507f1f77bcf86cd799439011",
+        "author": {
+          "id": "507f1f77bcf86cd799439011",
+          "username": "john_doe"
+        }
+      }
+    ],
+    "total": 1
+  }
+}

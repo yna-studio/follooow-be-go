@@ -18,6 +18,8 @@ type DetailNewsParams struct {
 }
 
 var NewsCollections *mongo.Collection = configs.GetCollection(configs.DB, "news")
+var UsersCollections *mongo.Collection = configs.GetCollection(configs.DB, "users")
+var NewsInfluencersCollections *mongo.Collection = configs.GetCollection(configs.DB, "influencers")
 
 // function to to get detail by news_id
 // auto increase visits + 1 if data found on DB
@@ -27,21 +29,34 @@ func GetDetailNews(ctx context.Context, params DetailNewsParams) (error, models.
 
 	objId, _ := primitive.ObjectIDFromHex(params.NewsId)
 	filterListData := bson.M{
-		"_id":  objId,
-		"lang": params.Lang,
+		"_id": objId,
+	}
+
+	// Only add lang filter if it exists in the document
+	// Some news documents might not have lang field
+	if params.Lang != "" {
+		filterListData["lang"] = params.Lang
 	}
 
 	err := NewsCollections.FindOne(ctx, filterListData).Decode(&news)
 
-	if err == nil {
-		// increase visits
-		NewsCollections.UpdateOne(ctx, bson.D{{"_id", objId}}, bson.D{{"$set", bson.D{{"views", news.Views + 1}}}})
+	if err != nil {
+		// Return the error (could be "no documents in result" or other errors)
+		return err, news
+	}
 
-		// get list related influencers, max results is 20
+	// Document found successfully, continue processing
+	// increase visits
+	_, updateErr := NewsCollections.UpdateOne(ctx, bson.D{{"_id", objId}}, bson.D{{"$set", bson.D{{"views", news.Views + 1}}}})
+
+	if updateErr != nil {
+		return updateErr, news
+	}
+
+	// get influencer data if news has influencers
+	if len(news.Influencers) > 0 {
+		var idsArr []string = news.Influencers
 		var idsObjId []primitive.ObjectID
-
-		// variable to save all influencer_id
-		idsArr := news.Influencers
 
 		// normalize ids
 		for key := range idsArr {
@@ -54,7 +69,7 @@ func GetDetailNews(ctx context.Context, params DetailNewsParams) (error, models.
 		filterLastDataInfluencers := bson.D{{"_id", bson.M{"$in": idsObjId}}}
 
 		// get influencer data from database
-		resultsInfluencers, _ := InfluencersCollections.Find(ctx, filterLastDataInfluencers, optsListDataInfluencers)
+		resultsInfluencers, _ := NewsInfluencersCollections.Find(ctx, filterLastDataInfluencers, optsListDataInfluencers)
 		defer resultsInfluencers.Close(ctx)
 
 		// normalize db results
@@ -69,9 +84,23 @@ func GetDetailNews(ctx context.Context, params DetailNewsParams) (error, models.
 
 		news.Influencers = nil
 		news.InfluencersData = influencers
-
 	}
 
-	return err, news
+	// get author information if author_id exists
+	if news.AuthorID != "" {
+		authorObjID, err := primitive.ObjectIDFromHex(news.AuthorID)
+		if err == nil {
+			var author models.UserModel
+			err := UsersCollections.FindOne(ctx, bson.M{"_id": authorObjID}).Decode(&author)
+			if err == nil {
+				news.Author = &models.AuthorModel{
+					ID:       author.ID.Hex(),
+					Username: author.Username,
+				}
+			}
+		}
+	}
+
+	return nil, news
 
 }

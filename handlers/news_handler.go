@@ -21,6 +21,8 @@ import (
 )
 
 var newsCollection *mongo.Collection = configs.GetCollection(configs.DB, "news")
+var usersCollection *mongo.Collection = configs.GetCollection(configs.DB, "users")
+var newsInfluencersCollection *mongo.Collection = configs.GetCollection(configs.DB, "influencers")
 
 // var validate = validator.New()
 
@@ -137,7 +139,7 @@ func ListNews(c echo.Context) error {
 			filterListDataInfluencers = bson.D{{"_id", bson.M{"$in": idsObjId}}}
 
 			// get data from database
-			resultsInfluencers, err := influencersCollection.Find(ctx, filterListDataInfluencers, optsListDataInfluencers)
+			resultsInfluencers, err := newsInfluencersCollection.Find(ctx, filterListDataInfluencers, optsListDataInfluencers)
 			defer resultsInfluencers.Close(ctx)
 			// normalize db results
 			for resultsInfluencers.Next(ctx) {
@@ -154,6 +156,21 @@ func ListNews(c echo.Context) error {
 		}
 		// end of get all influencers on post
 
+		// get author information if author_id exists
+		if singleNews.AuthorID != "" {
+			authorObjID, err := primitive.ObjectIDFromHex(singleNews.AuthorID)
+			if err == nil {
+				var author models.UserModel
+				err := usersCollection.FindOne(ctx, bson.M{"_id": authorObjID}).Decode(&author)
+				if err == nil {
+					singleNews.Author = &models.AuthorModel{
+						ID:       author.ID.Hex(),
+						Username: author.Username,
+					}
+				}
+			}
+		}
+
 		news = append(news, singleNews)
 	}
 
@@ -169,7 +186,7 @@ func ListNews(c echo.Context) error {
 func DetailNews(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	// get influencer_id
+	// get news id
 	newsId := c.Param("news_id")
 
 	lang := "ID"
@@ -253,7 +270,7 @@ func CreateNews(c echo.Context) error {
 				idsObjId = append(idsObjId, objId)
 			}
 
-			_, err = influencersCollection.UpdateMany(ctx, bson.D{{"_id", bson.M{"$in": idsObjId}}}, bson.D{{"$set", bson.D{{"updated_on", now}}}})
+			_, err = newsInfluencersCollection.UpdateMany(ctx, bson.D{{"_id", bson.M{"$in": idsObjId}}}, bson.D{{"$set", bson.D{{"updated_on", now}}}})
 
 			return c.JSON(http.StatusCreated, responses.GlobalResponse{Status: http.StatusCreated, Message: "Success create news", Data: nil})
 		}
@@ -315,7 +332,7 @@ func UpdateNews(c echo.Context) error {
 				idsObjId = append(idsObjId, objId)
 			}
 
-			_, err = influencersCollection.UpdateMany(ctx, bson.D{{"_id", bson.M{"$in": idsObjId}}}, bson.D{{"$set", bson.D{{"updated_on", now}}}})
+			_, err = newsInfluencersCollection.UpdateMany(ctx, bson.D{{"_id", bson.M{"$in": idsObjId}}}, bson.D{{"$set", bson.D{{"updated_on", now}}}})
 
 			return c.JSON(http.StatusCreated, responses.GlobalResponse{Status: http.StatusCreated, Message: "Success update news", Data: nil})
 		}

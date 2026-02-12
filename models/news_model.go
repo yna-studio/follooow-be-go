@@ -4,6 +4,11 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+type AuthorModel struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+}
+
 type NewsModel struct {
 	Id              primitive.ObjectID         `json:"id,omitempty" bson:"_id,omitempty" validate:"required"`
 	Title           string                     `json:"title,omitempty" validate:"required"`
@@ -16,6 +21,8 @@ type NewsModel struct {
 	Influencers     []string                   `json:"influencers,omitempty"`
 	InfluencersData []InfluencerSmallDataModel `json:"influencers_data,omitempty"`
 	Slug            string                     `json:"slug,omitempty"`
+	AuthorID        string                     `json:"author_id,omitempty" bson:"author_id,omitempty"`
+	Author          *AuthorModel               `json:"author,omitempty" bson:"-"`
 }
 
 type PayloadNews struct {
