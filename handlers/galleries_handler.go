@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"follooow-be/configs"
 	"follooow-be/models"
 	"follooow-be/repositories"
@@ -20,6 +21,8 @@ import (
 )
 
 var galleryCollection *mongo.Collection = configs.GetCollection(configs.DB, "galleries")
+var galleryUsersCollection *mongo.Collection = configs.GetCollection(configs.DB, "users")
+var galleryInfluencersCollection *mongo.Collection = configs.GetCollection(configs.DB, "influencers")
 
 // handler of GET /influencers
 func ListGalleries(c echo.Context) error {
@@ -127,7 +130,7 @@ func ListGalleries(c echo.Context) error {
 			filterListDataInfluencers = bson.D{{"_id", bson.M{"$in": idsObjId}}}
 
 			// get data from database
-			resultsInfluencers, err := influencersCollection.Find(ctx, filterListDataInfluencers, optsListDataInfluencers)
+			resultsInfluencers, err := galleryInfluencersCollection.Find(ctx, filterListDataInfluencers, optsListDataInfluencers)
 			defer resultsInfluencers.Close(ctx)
 			// normalize db results
 			for resultsInfluencers.Next(ctx) {
@@ -141,6 +144,29 @@ func ListGalleries(c echo.Context) error {
 
 			singleGallery.Influencers = nil
 			singleGallery.InfluencersData = influencers
+		}
+
+		// get author information if author_id exists
+		if singleGallery.AuthorID != "" {
+			fmt.Printf("DEBUG: Found AuthorID: %s\n", singleGallery.AuthorID)
+			authorObjID, err := primitive.ObjectIDFromHex(singleGallery.AuthorID)
+			if err == nil {
+				var author models.UserModel
+				err := galleryUsersCollection.FindOne(ctx, bson.M{"_id": authorObjID}).Decode(&author)
+				if err == nil {
+					singleGallery.Author = &models.AuthorModel{
+						ID:       author.ID.Hex(),
+						Username: author.Username,
+					}
+					fmt.Printf("DEBUG: Author found: %s\n", author.Username)
+				} else {
+					fmt.Printf("DEBUG: Error finding author: %v\n", err)
+				}
+			} else {
+				fmt.Printf("DEBUG: Error parsing AuthorID: %v\n", err)
+			}
+		} else {
+			fmt.Printf("DEBUG: No AuthorID found for gallery: %s\n", singleGallery.Id.Hex())
 		}
 
 		galleries = append(galleries, singleGallery)
@@ -213,7 +239,7 @@ func DetailGallery(c echo.Context) error {
 		filterListDataInfluencers = bson.D{{"_id", bson.M{"$in": idsObjId}}}
 
 		// get data from database
-		resultsInfluencers, err := influencersCollection.Find(ctx, filterListDataInfluencers, optsListDataInfluencers)
+		resultsInfluencers, err := galleryInfluencersCollection.Find(ctx, filterListDataInfluencers, optsListDataInfluencers)
 		defer resultsInfluencers.Close(ctx)
 		// normalize db results
 		for resultsInfluencers.Next(ctx) {
@@ -229,6 +255,30 @@ func DetailGallery(c echo.Context) error {
 		gallery.InfluencersData = influencers
 	}
 	// end of get all influencers on post
+
+	// get author information if author_id exists
+	if gallery.AuthorID != "" {
+		fmt.Printf("DEBUG: DetailGallery - Found AuthorID: %s\n", gallery.AuthorID)
+		authorObjID, err := primitive.ObjectIDFromHex(gallery.AuthorID)
+		if err == nil {
+			var author models.UserModel
+			err := galleryUsersCollection.FindOne(ctx, bson.M{"_id": authorObjID}).Decode(&author)
+			if err == nil {
+				gallery.Author = &models.AuthorModel{
+					ID:       author.ID.Hex(),
+					Username: author.Username,
+				}
+				fmt.Printf("DEBUG: DetailGallery - Author found: %s\n", author.Username)
+			} else {
+				fmt.Printf("DEBUG: DetailGallery - Error finding author: %v\n", err)
+			}
+		} else {
+			fmt.Printf("DEBUG: DetailGallery - Error parsing AuthorID: %v\n", err)
+		}
+	} else {
+		fmt.Printf("DEBUG: DetailGallery - No AuthorID found for gallery: %s\n", gallery.Id.Hex())
+	}
+
 	return c.JSON(http.StatusOK, responses.GlobalResponse{Status: http.StatusOK, Message: "OK", Data: &echo.Map{"gallery": gallery}})
 }
 

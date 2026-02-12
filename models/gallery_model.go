@@ -24,6 +24,8 @@ type GalleryModel struct {
 	Lang            string                     `json:"lang, omitempty"  validate:"required"`
 	Views           int                        `json:"views, omitempty"  validate:"required"`
 	Slug            string                     `json:"slug, omitempty"  validate:"required"`
+	AuthorID        string                     `json:"author_id,omitempty" bson:"author_id,omitempty"`
+	Author          *AuthorModel               `json:"author,omitempty" bson:"-"`
 }
 
 type PayloadGallery struct {
