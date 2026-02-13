@@ -7,6 +7,7 @@ import (
 	"follooow-be/models"
 	"follooow-be/repositories"
 	"follooow-be/responses"
+	"follooow-be/utils"
 	"net/http"
 	"strconv"
 	"strings"
@@ -213,39 +214,57 @@ func AddInfluencer(c echo.Context) error {
 
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Error parsing json", Data: nil})
-	} else {
-		new_data := bson.D{
-			{"name", payload.Name},
-			{"bio", payload.Bio},
-			{"code", payload.Slug},
-			{"avatar", payload.Avatar},
-			{"updated_on", now},
-			{"created_on", now},
-			{"nationality", payload.Nationality},
-			{"gender", payload.Gender},
-			{"socials", payload.Socials},
-			{"label", payload.Label},
-			{"best_moments", payload.BestMoments},
-			{"visits", 1}}
+	}
 
-		result, err := influencersCollection.InsertOne(ctx, new_data)
+	// Initialize Cloudinary if not already done
+	if configs.CloudinaryClient == nil {
+		configs.InitCloudinary()
+	}
 
+	// Handle avatar upload if base64 is provided
+	var avatarURL string
+	if payload.Avatar != "" {
+		// Generate folder path: /follooow/influencers/slug
+		folder := configs.EnvCloudinaryDir() + "/influencers/" + payload.Slug
+		filename := payload.Slug + "_avatar"
+
+		result, err := utils.UploadImageFromBase64(ctx, payload.Avatar, folder, filename)
 		if err != nil {
-
-			return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Error insert data", Data: nil})
-		} else {
-			// send info to Telegram channel
-			labels := ""
-			for _, n := range payload.Label {
-				labels = "#" + strings.ReplaceAll(n, " ", "") + " " + labels
-			}
-			chatMessage := "Added infuencers:\n" + payload.Name +
-				"\nhttps://follooow.com/id/influencers/" + payload.Slug + "-" + result.InsertedID.(primitive.ObjectID).Hex() +
-				"\nLabel: " + labels
-			repositories.TelegramSendMessage(chatMessage)
-			return c.JSON(http.StatusCreated, responses.GlobalResponse{Status: http.StatusCreated, Message: "Success add influencer", Data: nil})
+			return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error uploading avatar", Data: &echo.Map{"error": err.Error()}})
 		}
+		avatarURL = result.SecureURL
+	}
 
+	new_data := bson.D{
+		{"name", payload.Name},
+		{"bio", payload.Bio},
+		{"code", payload.Slug},
+		{"avatar", avatarURL},
+		{"updated_on", now},
+		{"created_on", now},
+		{"nationality", payload.Nationality},
+		{"gender", payload.Gender},
+		{"socials", payload.Socials},
+		{"label", payload.Label},
+		{"best_moments", payload.BestMoments},
+		{"visits", 1}}
+
+	result, err := influencersCollection.InsertOne(ctx, new_data)
+
+	if err != nil {
+
+		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Error insert data", Data: nil})
+	} else {
+		// send info to Telegram channel
+		labels := ""
+		for _, n := range payload.Label {
+			labels = "#" + strings.ReplaceAll(n, " ", "") + " " + labels
+		}
+		chatMessage := "Added infuencers:\n" + payload.Name +
+			"\nhttps://follooow.com/id/influencers/" + payload.Slug + "-" + result.InsertedID.(primitive.ObjectID).Hex() +
+			"\nLabel: " + labels
+		repositories.TelegramSendMessage(chatMessage)
+		return c.JSON(http.StatusCreated, responses.GlobalResponse{Status: http.StatusCreated, Message: "Success add influencer", Data: nil})
 	}
 }
 
@@ -271,30 +290,60 @@ func UpdateInfluencer(c echo.Context) error {
 	err = json.NewDecoder(c.Request().Body).Decode(&payload)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Error parsing json", Data: nil})
-	} else {
-		// start update
-		filter := bson.D{{"_id", objId}}
+	}
 
-		new_data := bson.D{
-			{"name", payload["name"]},
-			{"bio", payload["bio"]},
-			{"code", payload["slug"]},
-			{"avatar", payload["avatar"]},
-			{"updated_on", time.Now().UnixNano() / int64(time.Millisecond)},
-			{"nationality", payload["nationality"]},
-			{"gender", payload["gender"]},
-			{"socials", payload["socials"]},
-			{"label", payload["label"]},
-			{"best_moments", payload["best_moments"]},
-		}
+	// Initialize Cloudinary if not already done
+	if configs.CloudinaryClient == nil {
+		configs.InitCloudinary()
+	}
 
-		update := bson.D{{"$set", new_data}}
-
-		_, err := influencersCollection.UpdateOne(context.TODO(), filter, update)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error update database", Data: nil})
+	// Handle avatar upload if base64 is provided
+	var avatarURL string
+	if avatarData, ok := payload["avatar"].(string); ok && avatarData != "" {
+		// Get slug for folder path, use existing slug if not provided
+		slug := ""
+		if slugData, ok := payload["slug"].(string); ok {
+			slug = slugData
 		} else {
-			return c.JSON(http.StatusOK, responses.GlobalResponse{Status: http.StatusOK, Message: "Success update influencer", Data: nil})
+			slug = influencer.Code // use existing slug
 		}
+
+		// Generate folder path: /follooow/influencers/slug
+		folder := configs.EnvCloudinaryDir() + "/influencers/" + slug
+		filename := slug + "_avatar"
+
+		result, err := utils.UploadImageFromBase64(ctx, avatarData, folder, filename)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error uploading avatar", Data: &echo.Map{"error": err.Error()}})
+		}
+		avatarURL = result.SecureURL
+	} else {
+		// Use existing avatar if no new avatar provided
+		avatarURL = influencer.Avatar
+	}
+
+	// start update
+	filter := bson.D{{"_id", objId}}
+
+	new_data := bson.D{
+		{"name", payload["name"]},
+		{"bio", payload["bio"]},
+		{"code", payload["slug"]},
+		{"avatar", avatarURL},
+		{"updated_on", time.Now().UnixNano() / int64(time.Millisecond)},
+		{"nationality", payload["nationality"]},
+		{"gender", payload["gender"]},
+		{"socials", payload["socials"]},
+		{"label", payload["label"]},
+		{"best_moments", payload["best_moments"]},
+	}
+
+	update := bson.D{{"$set", new_data}}
+
+	_, err = influencersCollection.UpdateOne(context.TODO(), filter, update)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error update database", Data: &echo.Map{"error": err.Error()}})
+	} else {
+		return c.JSON(http.StatusOK, responses.GlobalResponse{Status: http.StatusOK, Message: "Success update influencer", Data: nil})
 	}
 }

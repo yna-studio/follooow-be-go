@@ -8,6 +8,7 @@ import (
 	"follooow-be/models"
 	"follooow-be/repositories"
 	"follooow-be/responses"
+	"follooow-be/utils"
 	"net/http"
 	"strconv"
 	"strings"
@@ -320,4 +321,99 @@ func CreateGallery(c echo.Context) error {
 			return c.JSON(http.StatusCreated, responses.GlobalResponse{Status: http.StatusCreated, Message: "Success create gallery", Data: nil})
 		}
 	}
+}
+
+// handle of POST /galleries/upload - for creating gallery with image uploads
+func CreateGalleryWithUpload(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Parse multipart form
+	form, err := c.MultipartForm()
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Error parsing multipart form", Data: &echo.Map{"error": err.Error()}})
+	}
+
+	// Get form fields
+	title := c.FormValue("title")
+	description := c.FormValue("description")
+	lang := c.FormValue("lang")
+	influencersStr := c.FormValue("influencers")
+	authorID := c.FormValue("author_id")
+
+	// Validate required fields
+	if title == "" {
+		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Title is required", Data: nil})
+	}
+	if lang == "" {
+		lang = "ID" // default language
+	}
+
+	// Parse influencers
+	var influencers []string
+	if influencersStr != "" {
+		influencers = strings.Split(influencersStr, ",")
+		// Trim whitespace from each influencer ID
+		for i, inf := range influencers {
+			influencers[i] = strings.TrimSpace(inf)
+		}
+	}
+
+	// Get uploaded files
+	files := form.File["images"]
+	if len(files) == 0 {
+		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "At least one image is required", Data: nil})
+	}
+
+	// Initialize Cloudinary if not already done
+	if configs.CloudinaryClient == nil {
+		configs.InitCloudinary()
+	}
+
+	// Upload images to Cloudinary
+	var images []models.ImageModel
+	for i, file := range files {
+		// Upload image
+		result, err := utils.UploadImageFromForm(ctx, file, "galleries")
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error uploading image", Data: &echo.Map{"error": err.Error()}})
+		}
+
+		// Create image model
+		imageModel := models.ImageModel{
+			IsCover:   i == 0, // First image is cover
+			Url:       result.SecureURL,
+			Caption:   file.Filename,
+			CreatedOn: int(time.Now().Unix()),
+			UpdatedOn: int(time.Now().Unix()),
+		}
+
+		images = append(images, imageModel)
+	}
+
+	// Generate slug
+	slug := strings.Replace(title, " ", "-", -1)
+	slug = strings.ToLower(slug)
+
+	// Insert gallery to database
+	result, err := repositories.CreateGallery(ctx, repositories.CreateGalleryParams{
+		Title:       title,
+		Description: description,
+		Images:      images,
+		Influencers: influencers,
+		Lang:        lang,
+		Slug:        slug,
+		AuthorID:    authorID,
+	})
+
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Error creating gallery", Data: &echo.Map{"error": err.Error()}})
+	}
+
+	// Post gallery to telegram channel
+	chatMessage := "New Gallery:\n" + title +
+		"\nhttps://follooow.com/" + lang + "/gallery/" + slug + "-" + result.InsertedID.(primitive.ObjectID).Hex()
+	repositories.TelegramSendMessage(chatMessage)
+
+	return c.JSON(http.StatusCreated, responses.GlobalResponse{Status: http.StatusCreated, Message: "Success create gallery with images", Data: &echo.Map{"gallery_id": result.InsertedID}})
 }

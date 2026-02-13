@@ -3,13 +3,17 @@ module follooow-be
 go 1.17
 
 require (
+	github.com/cloudinary/cloudinary-go/v2 v2.14.1 // indirect
 	github.com/creack/pty v1.1.18 // indirect
+	github.com/creasty/defaults v1.7.0 // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
 	github.com/go-playground/locales v0.14.0 // indirect
 	github.com/go-playground/universal-translator v0.18.0 // indirect
 	github.com/go-playground/validator/v10 v10.11.1 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
+	github.com/google/uuid v1.5.0 // indirect
+	github.com/gorilla/schema v1.4.1 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/joho/godotenv v1.4.0 // indirect
 	github.com/klauspost/compress v1.13.6 // indirect
