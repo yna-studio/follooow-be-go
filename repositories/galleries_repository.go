@@ -21,6 +21,7 @@ type CreateGalleryParams struct {
 	Lang        string
 	Slug        string
 	AuthorID    string
+	Tags        []string
 }
 
 // function to create new gallery
@@ -40,6 +41,7 @@ func CreateGallery(ctx context.Context, params CreateGalleryParams) (*mongo.Inse
 		{"images", params.Images},
 		{"influencers", params.Influencers},
 		{"author_id", params.AuthorID},
+		{"tags", params.Tags},
 	}
 
 	// insert data to database

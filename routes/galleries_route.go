@@ -12,4 +12,6 @@ func GalleriesRoute(e *echo.Echo) {
 	e.GET("/galleries/:gallery_id", handlers.DetailGallery)
 	e.POST("/galleries", handlers.CreateGallery)
 	e.POST("/galleries/upload", handlers.CreateGalleryWithUpload)
+	e.PUT("/galleries/:gallery_id", handlers.UpdateGallery)
+	e.PUT("/galleries/:gallery_id/upload", handlers.UpdateGalleryWithUpload)
 }

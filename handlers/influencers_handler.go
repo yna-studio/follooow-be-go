@@ -213,7 +213,7 @@ func AddInfluencer(c echo.Context) error {
 	err := json.NewDecoder(c.Request().Body).Decode(&payload)
 
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Error parsing json", Data: nil})
+		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: err.Error(), Data: nil})
 	}
 
 	// Initialize Cloudinary if not already done

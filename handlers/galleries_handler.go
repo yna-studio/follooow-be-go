@@ -307,6 +307,7 @@ func CreateGallery(c echo.Context) error {
 			Influencers: payload.Influencers,
 			Lang:        payload.Lang,
 			Slug:        slug,
+			Tags:        payload.Tags,
 		})
 
 		if errInsertGallery != nil {
@@ -340,6 +341,7 @@ func CreateGalleryWithUpload(c echo.Context) error {
 	lang := c.FormValue("lang")
 	influencersStr := c.FormValue("influencers")
 	authorID := c.FormValue("author_id")
+	tagsStr := c.FormValue("tags")
 
 	// Validate required fields
 	if title == "" {
@@ -356,6 +358,16 @@ func CreateGalleryWithUpload(c echo.Context) error {
 		// Trim whitespace from each influencer ID
 		for i, inf := range influencers {
 			influencers[i] = strings.TrimSpace(inf)
+		}
+	}
+
+	// Parse tags
+	var tags []string
+	if tagsStr != "" {
+		tags = strings.Split(tagsStr, ",")
+		// Trim whitespace from each tag
+		for i, tag := range tags {
+			tags[i] = strings.TrimSpace(tag)
 		}
 	}
 
@@ -404,6 +416,7 @@ func CreateGalleryWithUpload(c echo.Context) error {
 		Lang:        lang,
 		Slug:        slug,
 		AuthorID:    authorID,
+		Tags:        tags,
 	})
 
 	if err != nil {
