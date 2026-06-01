@@ -3,10 +3,12 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"follooow-be/configs"
 	"follooow-be/models"
 	"follooow-be/responses"
 	"follooow-be/utils"
+	"follooow-be/repositories"
 	"net/http"
 	"strings"
 	"time"
@@ -113,6 +115,39 @@ func UpdateGallery(c echo.Context) error {
 		})
 	}
 
+	// Synchronize label counts based on tag changes
+	if payload.Tags != nil {
+		oldTags := existingGallery.Tags
+		newTags := payload.Tags
+
+		oldSet := make(map[string]struct{})
+		for _, t := range oldTags {
+			oldSet[t] = struct{}{}
+		}
+		newSet := make(map[string]struct{})
+		for _, t := range newTags {
+			newSet[t] = struct{}{}
+		}
+
+		// Increment counts for newly added tags
+		for tag := range newSet {
+			if _, exists := oldSet[tag]; !exists {
+				if err := repositories.UpdateLabelCount(ctx, tag, 1); err != nil {
+					fmt.Printf("failed to increment label %s: %v\n", tag, err)
+				}
+			}
+		}
+
+		// Decrement counts for removed tags
+		for tag := range oldSet {
+			if _, exists := newSet[tag]; !exists {
+				if err := repositories.UpdateLabelCount(ctx, tag, -1); err != nil {
+					fmt.Printf("failed to decrement label %s: %v\n", tag, err)
+				}
+			}
+		}
+	}
+
 	return c.JSON(http.StatusOK, responses.GlobalResponse{
 		Status:  http.StatusOK,
 		Message: "Gallery updated successfully",
@@ -211,8 +246,9 @@ func UpdateGalleryWithUpload(c echo.Context) error {
 	}
 
 	// Parse tags if provided
+	var tags []string
 	if tagsStr != "" {
-		tags := strings.Split(tagsStr, ",")
+		tags = strings.Split(tagsStr, ",")
 		for i, tag := range tags {
 			tags[i] = strings.TrimSpace(tag)
 		}
@@ -260,6 +296,39 @@ func UpdateGalleryWithUpload(c echo.Context) error {
 			Message: "Error updating gallery",
 			Data:    &echo.Map{"error": err.Error()},
 		})
+	}
+
+	// Synchronize label counts based on tag changes
+	if tags != nil {
+		oldTags := existingGallery.Tags
+		newTags := tags
+
+		oldSet := make(map[string]struct{})
+		for _, t := range oldTags {
+			oldSet[t] = struct{}{}
+		}
+		newSet := make(map[string]struct{})
+		for _, t := range newTags {
+			newSet[t] = struct{}{}
+		}
+
+		// Increment counts for newly added tags
+		for tag := range newSet {
+			if _, exists := oldSet[tag]; !exists {
+				if err := repositories.UpdateLabelCount(ctx, tag, 1); err != nil {
+					fmt.Printf("failed to increment label %s: %v\n", tag, err)
+				}
+			}
+		}
+
+		// Decrement counts for removed tags
+		for tag := range oldSet {
+			if _, exists := newSet[tag]; !exists {
+				if err := repositories.UpdateLabelCount(ctx, tag, -1); err != nil {
+					fmt.Printf("failed to decrement label %s: %v\n", tag, err)
+				}
+			}
+		}
 	}
 
 	return c.JSON(http.StatusOK, responses.GlobalResponse{

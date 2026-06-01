@@ -332,6 +332,12 @@ func CreateGallery(c echo.Context) error {
 				"\nhttps://follooow.com/" + payload.Lang + "/gallery/" + slug + "-" + result.InsertedID.(primitive.ObjectID).Hex()
 			repositories.TelegramSendMessage(chatMessage)
 			// end of gallery news to telegram channel
+			// Update label counts for tags
+			for _, tag := range payload.Tags {
+				if err := repositories.UpdateLabelCount(ctx, tag, 1); err != nil {
+					fmt.Printf("failed to increment label %s: %v\n", tag, err)
+				}
+			}
 			return c.JSON(http.StatusCreated, responses.GlobalResponse{Status: http.StatusCreated, Message: "Success create gallery", Data: nil})
 		}
 	}

@@ -282,6 +282,13 @@ func CreateNews(c echo.Context) error {
 
 			_, err = newsInfluencersCollection.UpdateMany(ctx, bson.D{{"_id", bson.M{"$in": idsObjId}}}, bson.D{{"$set", bson.D{{"updated_on", now}}}})
 
+			// Update label counts for tags
+			for _, tag := range payload.Tags {
+				if err := repositories.UpdateLabelCount(ctx, tag, 1); err != nil {
+					// Log error but do not abort creation
+					fmt.Printf("failed to update label %s: %v\n", tag, err)
+				}
+			}
 			return c.JSON(http.StatusCreated, responses.GlobalResponse{Status: http.StatusCreated, Message: "Success create news", Data: nil})
 		}
 	}
@@ -355,7 +362,31 @@ func UpdateNews(c echo.Context) error {
 				idsObjId = append(idsObjId, objId)
 			}
 
-			_, err = newsInfluencersCollection.UpdateMany(ctx, bson.D{{"_id", bson.M{"$in": idsObjId}}}, bson.D{{"$set", bson.D{{"updated_on", now}}}})
+        // Adjust label counts based on tag changes
+        oldTagsMap := make(map[string]bool)
+        for _, t := range news.Tags {
+            oldTagsMap[t] = true
+        }
+        newTagsMap := make(map[string]bool)
+        for _, t := range payload.Tags {
+            newTagsMap[t] = true
+        }
+        // Increment for new tags
+        for _, t := range payload.Tags {
+            if !oldTagsMap[t] {
+                if err := repositories.UpdateLabelCount(ctx, t, 1); err != nil {
+                    fmt.Printf("failed to increment label %s: %v\n", t, err)
+                }
+            }
+        }
+        // Decrement for removed tags
+        for _, t := range news.Tags {
+            if !newTagsMap[t] {
+                if err := repositories.UpdateLabelCount(ctx, t, -1); err != nil {
+                    fmt.Printf("failed to decrement label %s: %v\n", t, err)
+                }
+            }
+        }
 
 			return c.JSON(http.StatusCreated, responses.GlobalResponse{Status: http.StatusCreated, Message: "Success update news", Data: nil})
 		}
