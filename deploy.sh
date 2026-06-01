@@ -28,20 +28,19 @@ fi
 
 # Write .env file
 cat > "$ENV_FILE" <<EOF
-TELEGRAM_FOLLOOOW_CHANNEL=follooow_channel
+TELEGRAM_FOLLOOOW_CHANNEL=@follooow_channel
 TELEGRAM_FOLLOOOW_TOKEN=6300896180:AAHxybkFLqQQ-Uc7oPBuKIdUvvhsmlhrm0o
-MONGO_URI=mongodb://127.0.0.1:27017/follooow
+MONGO_URI=mongodb+srv://webdev:Rahasia20@follooow-prod.8ewjbku.mongodb.net/?appName=follooow-prod
 MONGO_DB=follooow
+CLOUDINARY_DIR=/follooow
+CLOUDINARY_CLOUD_NAME=dhjkktmal
+CLOUDINARY_API_KEY=546653438788785
+CLOUDINARY_API_SECRET=pAtLP1NVgyxcSKzG68eCH-RcbWw
 EOF
 
 # Build the Go binary
 echo "Building the Go application..."
-if go build -o "$APP_NAME" main.go; then
-  echo "Build succeeded."
-else
-  echo "Go build failed. Exiting."
-  exit 1
-fi
+go build main.go
 
 # Start the application with pm2
 echo "Starting pm2 process $APP_NAME..."
