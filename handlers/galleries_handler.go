@@ -66,6 +66,11 @@ func ListGalleries(c echo.Context) error {
 		filterListData["lang"] = c.QueryParam("lang")
 	}
 
+	// handling filter by tags
+	if c.QueryParam("tags") != "" {
+		filterListData["tags"] = bson.M{"$in": strings.Split(c.QueryParam("tags"), ",")}
+	}
+
 	// handling filter by influencer id keyword [DONE]
 	if c.QueryParam("influencer_ids") != "" {
 		idsArr := strings.Split(c.QueryParam("influencer_ids"), ",")
