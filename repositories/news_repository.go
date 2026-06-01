@@ -87,16 +87,13 @@ func GetDetailNews(ctx context.Context, params DetailNewsParams) (error, models.
 	}
 
 	// get author information if author_id exists
-	if news.AuthorID != "" {
-		authorObjID, err := primitive.ObjectIDFromHex(news.AuthorID)
+	if !news.AuthorID.IsZero() {
+		var author models.UserModel
+		err := UsersCollections.FindOne(ctx, bson.M{"_id": news.AuthorID}).Decode(&author)
 		if err == nil {
-			var author models.UserModel
-			err := UsersCollections.FindOne(ctx, bson.M{"_id": authorObjID}).Decode(&author)
-			if err == nil {
-				news.Author = &models.AuthorModel{
-					ID:       author.ID.Hex(),
-					Username: author.Username,
-				}
+			news.Author = &models.AuthorModel{
+				ID:       author.ID.Hex(),
+				Username: author.Username,
 			}
 		}
 	}

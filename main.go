@@ -22,6 +22,8 @@ func main() {
 	routes.GalleriesRoute(e)
 	routes.UserRoute(e)
 	routes.MediaRoute(e)
+	routes.LabelsRoute(e)
+	routes.SyncRoute(e)
 
 	e.Logger.Fatal(e.Start(":20223"))
 }

@@ -21,7 +21,7 @@ type NewsModel struct {
 	Influencers     []string                   `json:"influencers,omitempty"`
 	InfluencersData []InfluencerSmallDataModel `json:"influencers_data,omitempty"`
 	Slug            string                     `json:"slug,omitempty"`
-	AuthorID        string                     `json:"author_id,omitempty" bson:"author_id,omitempty"`
+	AuthorID        primitive.ObjectID         `json:"author_id,omitempty" bson:"author_id,omitempty"`
 	Author          *AuthorModel               `json:"author,omitempty" bson:"-"`
 }
 

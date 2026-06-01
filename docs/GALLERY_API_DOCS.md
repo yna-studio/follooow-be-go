@@ -15,6 +15,9 @@ http://localhost:20223
 
 Create a new gallery with JSON payload.
 
+#### Required Headers
+- `author_id` (string, required): User ID of the author creating the gallery
+
 #### Request Body
 ```json
 {
@@ -39,6 +42,7 @@ Create a new gallery with JSON payload.
 ```bash
 curl -X POST http://localhost:20223/galleries \
   -H "Content-Type: application/json" \
+  -H "author_id: 507f1f77bcf86cd799439011" \
   -d '{
     "title": "Summer Fashion 2024",
     "description": "Latest summer fashion trends and styles",
@@ -73,23 +77,25 @@ curl -X POST http://localhost:20223/galleries \
 
 Create a new gallery with image file uploads.
 
+#### Required Headers
+- `author_id` (string, required): User ID of the author creating the gallery
+
 #### Request Body (multipart/form-data)
 - `title` (string, required): Gallery title
 - `description` (string, optional): Gallery description
 - `lang` (string, optional): Language code (default: "ID")
 - `influencers` (string, optional): Comma-separated influencer IDs
-- `author_id` (string, optional): Author ID
 - `tags` (string, optional): Comma-separated tags
 - `images` (files, required): Image files
 
 #### Curl Example
 ```bash
 curl -X POST http://localhost:20223/galleries/upload \
+  -H "author_id: 507f1f77bcf86cd799439011" \
   -F "title=Summer Fashion 2024" \
   -F "description=Latest summer fashion trends" \
   -F "lang=ID" \
   -F "influencers=influencer_id_1,influencer_id_2" \
-  -F "author_id=author_id_123" \
   -F "tags=jilbab,sport,fashion,summer" \
   -F "images=@image1.jpg" \
   -F "images=@image2.jpg"
@@ -359,6 +365,26 @@ tags=jilbab,sport,fashion
 ## Error Responses
 
 ### Validation Errors (400)
+
+#### Missing author_id header
+```json
+{
+  "status": 400,
+  "message": "author_id header is required",
+  "data": null
+}
+```
+
+#### Invalid author_id format
+```json
+{
+  "status": 400,
+  "message": "Invalid author_id format",
+  "data": null
+}
+```
+
+#### Missing required fields
 ```json
 {
   "status": 400,

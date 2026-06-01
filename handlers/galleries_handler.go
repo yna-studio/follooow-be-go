@@ -288,8 +288,20 @@ func CreateGallery(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// Get required author_id from header
+	authorID := c.Request().Header.Get("author_id")
+	if authorID == "" {
+		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "author_id header is required", Data: nil})
+	}
+
+	// Validate author_id is a valid ObjectId
+	_, err := primitive.ObjectIDFromHex(authorID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Invalid author_id format", Data: nil})
+	}
+
 	var payload models.PayloadGallery
-	err := json.NewDecoder(c.Request().Body).Decode(&payload)
+	err = json.NewDecoder(c.Request().Body).Decode(&payload)
 
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Error parsing json", Data: nil})
@@ -308,6 +320,7 @@ func CreateGallery(c echo.Context) error {
 			Lang:        payload.Lang,
 			Slug:        slug,
 			Tags:        payload.Tags,
+			AuthorID:    authorID,
 		})
 
 		if errInsertGallery != nil {
@@ -329,6 +342,18 @@ func CreateGalleryWithUpload(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Get required author_id from header
+	authorID := c.Request().Header.Get("author_id")
+	if authorID == "" {
+		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "author_id header is required", Data: nil})
+	}
+
+	// Validate author_id is a valid ObjectId
+	_, err := primitive.ObjectIDFromHex(authorID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Invalid author_id format", Data: nil})
+	}
+
 	// Parse multipart form
 	form, err := c.MultipartForm()
 	if err != nil {
@@ -340,7 +365,6 @@ func CreateGalleryWithUpload(c echo.Context) error {
 	description := c.FormValue("description")
 	lang := c.FormValue("lang")
 	influencersStr := c.FormValue("influencers")
-	authorID := c.FormValue("author_id")
 	tagsStr := c.FormValue("tags")
 
 	// Validate required fields

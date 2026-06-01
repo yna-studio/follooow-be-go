@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"follooow-be/configs"
 	"follooow-be/models"
 	"follooow-be/repositories"
@@ -255,14 +256,29 @@ func AddInfluencer(c echo.Context) error {
 
 		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Error insert data", Data: nil})
 	} else {
-		// send info to Telegram channel
-		labels := ""
-		for _, n := range payload.Label {
-			labels = "#" + strings.ReplaceAll(n, " ", "") + " " + labels
+		// Process label counts in the 'labels' collection
+		labelCol := configs.GetCollection(configs.DB, "labels")
+		for _, lbl := range payload.Label {
+			filter := bson.M{"label": lbl}
+			update := bson.M{
+				"$inc": bson.M{"total": 1},
+				"$setOnInsert": bson.M{"label": lbl},
+			}
+			_, err := labelCol.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
+			if err != nil {
+				// Log error but continue processing other labels
+				fmt.Printf("Error updating label %s: %v\n", lbl, err)
+			}
 		}
-		chatMessage := "Added infuencers:\n" + payload.Name +
+
+		// Prepare Telegram notification with label hashtags
+		labelsStr := ""
+		for _, n := range payload.Label {
+			labelsStr = "#" + strings.ReplaceAll(n, " ", "") + " " + labelsStr
+		}
+		chatMessage := "Added influencer:\n" + payload.Name +
 			"\nhttps://follooow.com/id/influencers/" + payload.Slug + "-" + result.InsertedID.(primitive.ObjectID).Hex() +
-			"\nLabel: " + labels
+			"\nLabel: " + labelsStr
 		repositories.TelegramSendMessage(chatMessage)
 		return c.JSON(http.StatusCreated, responses.GlobalResponse{Status: http.StatusCreated, Message: "Success add influencer", Data: nil})
 	}
@@ -321,6 +337,50 @@ func UpdateInfluencer(c echo.Context) error {
 		// Use existing avatar if no new avatar provided
 		avatarURL = influencer.Avatar
 	}
+
+    // Extract old and new labels
+    var oldLabels []string
+    for _, l := range influencer.Label {
+        oldLabels = append(oldLabels, l)
+    }
+    var newLabels []string
+    if lbls, ok := payload["label"].([]interface{}); ok {
+        for _, v := range lbls {
+            if s, ok := v.(string); ok {
+                newLabels = append(newLabels, s)
+            }
+        }
+    }
+    // Decrement counts for removed labels
+    for _, old := range oldLabels {
+        found := false
+        for _, nw := range newLabels {
+            if old == nw {
+                found = true
+                break
+            }
+        }
+        if !found {
+            if err := repositories.UpdateLabelCount(ctx, old, -1); err != nil {
+                return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error updating label count", Data: nil})
+            }
+        }
+    }
+    // Increment counts for newly added labels (upsert)
+    for _, nw := range newLabels {
+        already := false
+        for _, old := range oldLabels {
+            if nw == old {
+                already = true
+                break
+            }
+        }
+        if !already {
+            if err := repositories.UpdateLabelCount(ctx, nw, 1); err != nil {
+                return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error updating label count", Data: nil})
+            }
+        }
+    }
 
 	// start update
 	filter := bson.D{{"_id", objId}}

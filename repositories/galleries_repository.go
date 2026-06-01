@@ -2,11 +2,13 @@ package repositories
 
 import (
 	"context"
+	"fmt"
 	"follooow-be/configs"
 	"follooow-be/models"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -29,6 +31,17 @@ type CreateGalleryParams struct {
 func CreateGallery(ctx context.Context, params CreateGalleryParams) (*mongo.InsertOneResult, error) {
 	// get now times
 	now := time.Now().UnixNano() / int64(time.Millisecond)
+
+	// Convert author_id string to ObjectId
+	var authorObjID primitive.ObjectID
+	if params.AuthorID != "" {
+		var err error
+		authorObjID, err = primitive.ObjectIDFromHex(params.AuthorID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid author_id format: %w", err)
+		}
+	}
+
 	// ref: https://stackoverflow.com/a/8689281/2780875
 	newData := bson.D{
 		{"title", params.Title},
@@ -40,7 +53,7 @@ func CreateGallery(ctx context.Context, params CreateGalleryParams) (*mongo.Inse
 		{"lang", params.Lang},
 		{"images", params.Images},
 		{"influencers", params.Influencers},
-		{"author_id", params.AuthorID},
+		{"author_id", authorObjID},
 		{"tags", params.Tags},
 	}
 

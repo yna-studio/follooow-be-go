@@ -157,16 +157,13 @@ func ListNews(c echo.Context) error {
 		// end of get all influencers on post
 
 		// get author information if author_id exists
-		if singleNews.AuthorID != "" {
-			authorObjID, err := primitive.ObjectIDFromHex(singleNews.AuthorID)
+		if !singleNews.AuthorID.IsZero() {
+			var author models.UserModel
+			err := usersCollection.FindOne(ctx, bson.M{"_id": singleNews.AuthorID}).Decode(&author)
 			if err == nil {
-				var author models.UserModel
-				err := usersCollection.FindOne(ctx, bson.M{"_id": authorObjID}).Decode(&author)
-				if err == nil {
-					singleNews.Author = &models.AuthorModel{
-						ID:       author.ID.Hex(),
-						Username: author.Username,
-					}
+				singleNews.Author = &models.AuthorModel{
+					ID:       author.ID.Hex(),
+					Username: author.Username,
 				}
 			}
 		}
@@ -215,9 +212,21 @@ func CreateNews(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// Get required author_id from header
+	authorID := c.Request().Header.Get("author_id")
+	if authorID == "" {
+		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "author_id header is required", Data: nil})
+	}
+
+	// Validate author_id is a valid ObjectId
+	authorObjID, err := primitive.ObjectIDFromHex(authorID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Invalid author_id format", Data: nil})
+	}
+
 	// var payload models.PayloadNews
 	var payload models.PayloadNews
-	err := json.NewDecoder(c.Request().Body).Decode(&payload)
+	err = json.NewDecoder(c.Request().Body).Decode(&payload)
 	now := time.Now().UnixNano() / int64(time.Millisecond)
 
 	if err != nil {
@@ -240,6 +249,7 @@ func CreateNews(c echo.Context) error {
 			{"influencers", payload.Influencers},
 			{"lang", payload.Lang},
 			{"slug", slug},
+			{"author_id", authorObjID},
 		}
 
 		// insert new data to db
@@ -282,6 +292,18 @@ func UpdateNews(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// Get required author_id from header
+	authorID := c.Request().Header.Get("author_id")
+	if authorID == "" {
+		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "author_id header is required", Data: nil})
+	}
+
+	// Validate author_id is a valid ObjectId
+	authorObjID, err := primitive.ObjectIDFromHex(authorID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Invalid author_id format", Data: nil})
+	}
+
 	// get news id
 	newsId := c.Param("news_id")
 	var news models.NewsModel
@@ -297,7 +319,7 @@ func UpdateNews(c echo.Context) error {
 
 	// var payload models.PayloadNews
 	var payload models.PayloadNews
-	err := json.NewDecoder(c.Request().Body).Decode(&payload)
+	err = json.NewDecoder(c.Request().Body).Decode(&payload)
 	now := time.Now().UnixNano() / int64(time.Millisecond)
 
 	if err != nil {
@@ -311,6 +333,7 @@ func UpdateNews(c echo.Context) error {
 			{"tags", payload.Tags},
 			{"influencers", payload.Influencers},
 			{"lang", payload.Lang},
+			{"author_id", authorObjID},
 		}
 
 		filter := bson.D{{"_id", objId}}
