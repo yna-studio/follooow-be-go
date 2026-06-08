@@ -91,6 +91,36 @@ func UploadImageFromBase64(ctx context.Context, base64Data string, folder string
 	return result, nil
 }
 
+// IsBase64ImageString returns true when a string appears to be a base64 image payload
+func IsBase64ImageString(data string) bool {
+	if data == "" {
+		return false
+	}
+
+	if strings.HasPrefix(data, "data:") {
+		return true
+	}
+
+	// Base64 strings should be clean data payloads, not URLs
+	if strings.Contains(data, " ") || strings.Contains(data, "\n") || strings.Contains(data, "\r") {
+		return false
+	}
+
+	// Try to strip common data URI prefix if present
+	if strings.Contains(data, ",") {
+		parts := strings.SplitN(data, ",", 2)
+		data = parts[1]
+	}
+
+	// Length must be a multiple of 4 for standard base64
+	if len(data)%4 != 0 {
+		return false
+	}
+
+	_, err := base64.StdEncoding.DecodeString(data)
+	return err == nil
+}
+
 // UploadImageFromURL uploads an image from URL to Cloudinary
 func UploadImageFromURL(ctx context.Context, imageURL string, filename string) (*uploader.UploadResult, error) {
 	if imageURL == "" {

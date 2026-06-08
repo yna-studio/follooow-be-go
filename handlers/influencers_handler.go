@@ -210,8 +210,12 @@ func AddInfluencer(c echo.Context) error {
 
 	now := time.Now().UnixNano() / int64(time.Millisecond)
 
+	// parse all payload
 	var payload models.PayloadInfluencer
 	err := json.NewDecoder(c.Request().Body).Decode(&payload)
+
+	// target upload directory in bucket
+	targetDir := configs.EnvCloudinaryDir() + "/influencers/" + payload.Slug
 
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: err.Error(), Data: nil})
@@ -226,16 +230,31 @@ func AddInfluencer(c echo.Context) error {
 	var avatarURL string
 	if payload.Avatar != "" {
 		// Generate folder path: /follooow/influencers/slug
-		folder := configs.EnvCloudinaryDir() + "/influencers/" + payload.Slug
 		filename := payload.Slug + "_avatar"
 
-		result, err := utils.UploadImageFromBase64(ctx, payload.Avatar, folder, filename)
+		result, err := utils.UploadImageFromBase64(ctx, payload.Avatar, targetDir, filename)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error uploading avatar", Data: &echo.Map{"error": err.Error()}})
 		}
 		avatarURL = result.SecureURL
 	}
 
+	// handle upload best_moment image
+	for i, bm := range payload.BestMoments {
+		if bm.Image != "" && utils.IsBase64ImageString(bm.Image) {
+			folder := targetDir + "/best_moments"
+			filename := payload.Slug + "_best_moment_" + strconv.Itoa(i)
+
+			result, err := utils.UploadImageFromBase64(ctx, bm.Image, folder, filename)
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error uploading best moment image", Data: &echo.Map{"error": err.Error()}})
+			}
+			// return uploaded image url in payload
+			payload.BestMoments[i].Image = result.SecureURL
+		}
+	}
+
+	// generate data to insert in database
 	new_data := bson.D{
 		{"name", payload.Name},
 		{"bio", payload.Bio},
@@ -261,7 +280,7 @@ func AddInfluencer(c echo.Context) error {
 		for _, lbl := range payload.Label {
 			filter := bson.M{"label": lbl}
 			update := bson.M{
-				"$inc": bson.M{"total": 1},
+				"$inc":         bson.M{"total": 1},
 				"$setOnInsert": bson.M{"label": lbl},
 			}
 			_, err := labelCol.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
@@ -313,22 +332,19 @@ func UpdateInfluencer(c echo.Context) error {
 		configs.InitCloudinary()
 	}
 
+	// determine the folder path for Cloudinary uploads based on slug
+	slug := influencer.Code
+	if slugData, ok := payload["slug"].(string); ok && slugData != "" {
+		slug = slugData
+	}
+	targetDir := configs.EnvCloudinaryDir() + "/influencers/" + slug
+
 	// Handle avatar upload if base64 is provided
 	var avatarURL string
 	if avatarData, ok := payload["avatar"].(string); ok && avatarData != "" {
-		// Get slug for folder path, use existing slug if not provided
-		slug := ""
-		if slugData, ok := payload["slug"].(string); ok {
-			slug = slugData
-		} else {
-			slug = influencer.Code // use existing slug
-		}
-
-		// Generate folder path: /follooow/influencers/slug
-		folder := configs.EnvCloudinaryDir() + "/influencers/" + slug
 		filename := slug + "_avatar"
 
-		result, err := utils.UploadImageFromBase64(ctx, avatarData, folder, filename)
+		result, err := utils.UploadImageFromBase64(ctx, avatarData, targetDir, filename)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error uploading avatar", Data: &echo.Map{"error": err.Error()}})
 		}
@@ -338,49 +354,76 @@ func UpdateInfluencer(c echo.Context) error {
 		avatarURL = influencer.Avatar
 	}
 
-    // Extract old and new labels
-    var oldLabels []string
-    for _, l := range influencer.Label {
-        oldLabels = append(oldLabels, l)
-    }
-    var newLabels []string
-    if lbls, ok := payload["label"].([]interface{}); ok {
-        for _, v := range lbls {
-            if s, ok := v.(string); ok {
-                newLabels = append(newLabels, s)
-            }
-        }
-    }
-    // Decrement counts for removed labels
-    for _, old := range oldLabels {
-        found := false
-        for _, nw := range newLabels {
-            if old == nw {
-                found = true
-                break
-            }
-        }
-        if !found {
-            if err := repositories.UpdateLabelCount(ctx, old, -1); err != nil {
-                return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error updating label count", Data: nil})
-            }
-        }
-    }
-    // Increment counts for newly added labels (upsert)
-    for _, nw := range newLabels {
-        already := false
-        for _, old := range oldLabels {
-            if nw == old {
-                already = true
-                break
-            }
-        }
-        if !already {
-            if err := repositories.UpdateLabelCount(ctx, nw, 1); err != nil {
-                return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error updating label count", Data: nil})
-            }
-        }
-    }
+	// Extract old and new labels
+	var oldLabels []string
+	for _, l := range influencer.Label {
+		oldLabels = append(oldLabels, l)
+	}
+	var newLabels []string
+	if lbls, ok := payload["label"].([]interface{}); ok {
+		for _, v := range lbls {
+			if s, ok := v.(string); ok {
+				newLabels = append(newLabels, s)
+			}
+		}
+	}
+	// Decrement counts for removed labels
+	for _, old := range oldLabels {
+		found := false
+		for _, nw := range newLabels {
+			if old == nw {
+				found = true
+				break
+			}
+		}
+		if !found {
+			if err := repositories.UpdateLabelCount(ctx, old, -1); err != nil {
+				return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error updating label count", Data: nil})
+			}
+		}
+	}
+	// Increment counts for newly added labels (upsert)
+	for _, nw := range newLabels {
+		already := false
+		for _, old := range oldLabels {
+			if nw == old {
+				already = true
+				break
+			}
+		}
+		if !already {
+			if err := repositories.UpdateLabelCount(ctx, nw, 1); err != nil {
+				return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error updating label count", Data: nil})
+			}
+		}
+	}
+
+	// handle upload best_moment image
+	if bestMoments, ok := payload["best_moments"].([]interface{}); ok {
+		for i, bmRaw := range bestMoments {
+			bm, ok := bmRaw.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			imageStr, ok := bm["image"].(string)
+			if imageStr == "" || !utils.IsBase64ImageString(imageStr) {
+				continue
+			}
+
+			folder := targetDir + "/best_moments"
+			filename := slug + "_best_moment_" + strconv.Itoa(i)
+
+			result, err := utils.UploadImageFromBase64(ctx, imageStr, folder, filename)
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error uploading best moment image", Data: &echo.Map{"error": err.Error()}})
+			}
+
+			bm["image"] = result.SecureURL
+			bestMoments[i] = bm
+		}
+		payload["best_moments"] = bestMoments
+	}
 
 	// start update
 	filter := bson.D{{"_id", objId}}
