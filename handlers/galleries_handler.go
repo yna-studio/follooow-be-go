@@ -312,6 +312,11 @@ func CreateGallery(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Error parsing json", Data: nil})
 	} else {
 
+		// ref: https://stackoverflow.com/a/8689281/2780875
+		slug := strings.Replace(payload.Title, " ", "-", -1)
+		slug = strings.ToLower(slug)
+		folderPath := fmt.Sprintf("follooow/galleries/%d/%s", time.Now().Year(), slug)
+
 		// Process images: if URL contains base64 image payload, upload to Cloudinary
 		var images []models.ImageModel
 		for idx, img := range payload.Images {
@@ -320,8 +325,8 @@ func CreateGallery(c echo.Context) error {
 					configs.InitCloudinary()
 				}
 
-				filename := fmt.Sprintf("gallery_%d_%d", time.Now().UnixNano(), idx)
-				uploadResult, err := utils.UploadImageFromBase64(ctx, img.Url, "galleries", filename)
+				filename := fmt.Sprintf("%s_%d_%d", slug, time.Now().UnixNano(), idx)
+				uploadResult, err := utils.UploadImageFromBase64(ctx, img.Url, folderPath, filename)
 				if err != nil {
 					return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error uploading base64 image", Data: &echo.Map{"error": err.Error()}})
 				}
@@ -337,10 +342,6 @@ func CreateGallery(c echo.Context) error {
 
 			images = append(images, img)
 		}
-
-		// ref: https://stackoverflow.com/a/8689281/2780875
-		slug := strings.Replace(payload.Title, " ", "-", -1)
-		slug = strings.ToLower(slug)
 
 		// insert data to db
 		result, errInsertGallery := repositories.CreateGallery(ctx, repositories.CreateGalleryParams{
@@ -443,11 +444,16 @@ func CreateGalleryWithUpload(c echo.Context) error {
 		configs.InitCloudinary()
 	}
 
+	// Generate slug and folder path for Cloudinary upload
+	slug := strings.Replace(title, " ", "-", -1)
+	slug = strings.ToLower(slug)
+	folderPath := fmt.Sprintf("follooow/galleries/%d/%s", time.Now().Year(), slug)
+
 	// Upload images to Cloudinary
 	var images []models.ImageModel
 	for i, file := range files {
 		// Upload image
-		result, err := utils.UploadImageFromForm(ctx, file, "galleries")
+		result, err := utils.UploadImageFromForm(ctx, file, folderPath)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error uploading image", Data: &echo.Map{"error": err.Error()}})
 		}
@@ -463,10 +469,6 @@ func CreateGalleryWithUpload(c echo.Context) error {
 
 		images = append(images, imageModel)
 	}
-
-	// Generate slug
-	slug := strings.Replace(title, " ", "-", -1)
-	slug = strings.ToLower(slug)
 
 	// Insert gallery to database
 	result, err := repositories.CreateGallery(ctx, repositories.CreateGalleryParams{
