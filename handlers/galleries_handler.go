@@ -312,6 +312,32 @@ func CreateGallery(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Error parsing json", Data: nil})
 	} else {
 
+		// Process images: if URL contains base64 image payload, upload to Cloudinary
+		var images []models.ImageModel
+		for idx, img := range payload.Images {
+			if utils.IsBase64ImageString(img.Url) {
+				if configs.CloudinaryClient == nil {
+					configs.InitCloudinary()
+				}
+
+				filename := fmt.Sprintf("gallery_%d_%d", time.Now().UnixNano(), idx)
+				uploadResult, err := utils.UploadImageFromBase64(ctx, img.Url, "galleries", filename)
+				if err != nil {
+					return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error uploading base64 image", Data: &echo.Map{"error": err.Error()}})
+				}
+				img.Url = uploadResult.SecureURL
+			}
+
+			if img.CreatedOn == 0 {
+				img.CreatedOn = int(time.Now().Unix())
+			}
+			if img.UpdatedOn == 0 {
+				img.UpdatedOn = int(time.Now().Unix())
+			}
+
+			images = append(images, img)
+		}
+
 		// ref: https://stackoverflow.com/a/8689281/2780875
 		slug := strings.Replace(payload.Title, " ", "-", -1)
 		slug = strings.ToLower(slug)
@@ -320,7 +346,7 @@ func CreateGallery(c echo.Context) error {
 		result, errInsertGallery := repositories.CreateGallery(ctx, repositories.CreateGalleryParams{
 			Title:       payload.Title,
 			Description: payload.Description,
-			Images:      payload.Images,
+			Images:      images,
 			Influencers: payload.Influencers,
 			Lang:        payload.Lang,
 			Slug:        slug,
