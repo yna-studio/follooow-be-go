@@ -14,6 +14,22 @@ import (
 	"github.com/cloudinary/cloudinary-go/v2/api/uploader"
 )
 
+const cloudinaryUploadTimeout = 30 * time.Second
+
+func buildCloudinaryUploadContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		return context.WithTimeout(context.Background(), cloudinaryUploadTimeout)
+	}
+
+	if deadline, ok := parent.Deadline(); ok {
+		if time.Until(deadline) < cloudinaryUploadTimeout {
+			return context.WithTimeout(context.Background(), cloudinaryUploadTimeout)
+		}
+	}
+
+	return context.WithTimeout(parent, cloudinaryUploadTimeout)
+}
+
 // UploadImageFromForm uploads an image from form data to Cloudinary
 func UploadImageFromForm(ctx context.Context, fileHeader *multipart.FileHeader, folder string) (*uploader.UploadResult, error) {
 	if fileHeader == nil {
@@ -41,7 +57,10 @@ func UploadImageFromForm(ctx context.Context, fileHeader *multipart.FileHeader, 
 		ResourceType: "image",
 	}
 
-	result, err := configs.CloudinaryClient.Upload.Upload(ctx, file, uploadParams)
+	uploadCtx, cancel := buildCloudinaryUploadContext(ctx)
+	defer cancel()
+
+	result, err := configs.CloudinaryClient.Upload.Upload(uploadCtx, file, uploadParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload image: %w", err)
 	}
@@ -83,7 +102,10 @@ func UploadImageFromBase64(ctx context.Context, base64Data string, folder string
 		ResourceType: "image",
 	}
 
-	result, err := configs.CloudinaryClient.Upload.Upload(ctx, reader, uploadParams)
+	uploadCtx, cancel := buildCloudinaryUploadContext(ctx)
+	defer cancel()
+
+	result, err := configs.CloudinaryClient.Upload.Upload(uploadCtx, reader, uploadParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload base64 image: %w", err)
 	}
@@ -133,7 +155,10 @@ func UploadImageFromURL(ctx context.Context, imageURL string, filename string) (
 		ResourceType: "image",
 	}
 
-	result, err := configs.CloudinaryClient.Upload.Upload(ctx, imageURL, uploadParams)
+	uploadCtx, cancel := buildCloudinaryUploadContext(ctx)
+	defer cancel()
+
+	result, err := configs.CloudinaryClient.Upload.Upload(uploadCtx, imageURL, uploadParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload image from URL: %w", err)
 	}
