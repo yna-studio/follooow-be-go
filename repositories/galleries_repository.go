@@ -60,12 +60,19 @@ func CreateGallery(ctx context.Context, params CreateGalleryParams) (*mongo.Inse
 	// insert data to database
 	result, err := GalleryCollections.InsertOne(ctx, newData)
 	if err != nil {
-		// stop process if error
-		return result, err
-	} else {
-		// update influencers updated_on
-		err = InfluencersUpdateOnToNow(ctx, params.Influencers)
 		return result, err
 	}
+
+	// update influencers updated_on as a best-effort secondary action.
+	// This should not fail the gallery creation if a related influencer ID is stale/invalid.
+	if len(params.Influencers) > 0 {
+		updateCtx, updateCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer updateCancel()
+		if updateErr := InfluencersUpdateOnToNow(updateCtx, params.Influencers); updateErr != nil {
+			fmt.Printf("warning: failed to update influencer timestamps after gallery insert: %v\n", updateErr)
+		}
+	}
+
+	return result, nil
 
 }

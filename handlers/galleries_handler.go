@@ -290,7 +290,7 @@ func DetailGallery(c echo.Context) error {
 
 // handle of POST /galleries
 func CreateGallery(c echo.Context) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	// Get required author_id from header
@@ -356,7 +356,7 @@ func CreateGallery(c echo.Context) error {
 		})
 
 		if errInsertGallery != nil {
-			return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Error insert data", Data: nil})
+			return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Error insert data", Data: &echo.Map{"error": errInsertGallery.Error()}})
 		} else {
 			// post gallery to telegram channel
 
