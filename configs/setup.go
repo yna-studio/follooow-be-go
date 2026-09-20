@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/mongo"
@@ -12,12 +13,14 @@ import (
 )
 
 func ConnectDB() *mongo.Client {
-	clientOptions := options.Client().ApplyURI(EnvMongoURI())
+	mongoURI := EnvMongoURI()
+	clientOptions := options.Client().ApplyURI(mongoURI)
 
-	// Configure TLS
-	clientOptions.SetTLSConfig(&tls.Config{
-		InsecureSkipVerify: true,
-	})
+	// Local MongoDB instances use plain mongodb:// connections. Hosted instances
+	// using SRV or explicitly requesting TLS retain the existing TLS behavior.
+	if strings.HasPrefix(mongoURI, "mongodb+srv://") || strings.Contains(mongoURI, "tls=true") {
+		clientOptions.SetTLSConfig(&tls.Config{InsecureSkipVerify: true})
+	}
 
 	// Set timeouts
 	clientOptions.SetServerSelectionTimeout(30 * time.Second)
