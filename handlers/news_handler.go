@@ -8,6 +8,7 @@ import (
 	"follooow-be/models"
 	"follooow-be/repositories"
 	"follooow-be/responses"
+	"follooow-be/utils"
 	"net/http"
 	"strconv"
 	"strings"
@@ -209,7 +210,7 @@ func DetailNews(c echo.Context) error {
 
 // handle of POST /news
 func CreateNews(c echo.Context) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	// Get required author_id from header
@@ -238,12 +239,36 @@ func CreateNews(c echo.Context) error {
 		slug := strings.Replace(stringTitle, " ", "-", -1)
 		slug = strings.ToLower(slug)
 
+		// Thumbnail is required and must be a base64 encoded image.
+		// It is uploaded to Cloudinary before the news document is stored.
+		if payload.Thumbnail == "" {
+			return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Thumbnail is required", Data: nil})
+		}
+		if !utils.IsBase64ImageString(payload.Thumbnail) {
+			return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Thumbnail must be a base64 encoded image", Data: nil})
+		}
+
+		// Initialize Cloudinary if not already done
+		if configs.CloudinaryClient == nil {
+			configs.InitCloudinary()
+		}
+
+		// target upload directory in bucket
+		targetDir := configs.EnvCloudinaryDir() + "/news/" + slug
+		filename := slug + "_thumbnail_" + strconv.FormatInt(now, 10)
+
+		uploadResult, err := utils.UploadImageFromBase64(ctx, payload.Thumbnail, targetDir, filename)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error uploading thumbnail", Data: &echo.Map{"error": err.Error()}})
+		}
+		thumbnailURL := uploadResult.SecureURL
+
 		new_data := bson.D{
 			{"title", payload.Title},
 			{"views", 1},
 			{"updated_on", now},
 			{"created_on", now},
-			{"thumbnail", payload.Thumbnail},
+			{"thumbnail", thumbnailURL},
 			{"content", payload.Content},
 			{"tags", payload.Tags},
 			{"influencers", payload.Influencers},
@@ -296,7 +321,7 @@ func CreateNews(c echo.Context) error {
 
 // handle of POST /news/:id
 func UpdateNews(c echo.Context) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	// Get required author_id from header
@@ -332,10 +357,40 @@ func UpdateNews(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, responses.GlobalResponse{Status: http.StatusBadRequest, Message: "Error parsing json", Data: nil})
 	} else {
+		// Thumbnail can be an existing URL (saved as-is) or a base64 image
+		// (uploaded to Cloudinary first). When omitted, keep the current one.
+		thumbnailURL := news.Thumbnail
+		if payload.Thumbnail != "" {
+			if utils.IsBase64ImageString(payload.Thumbnail) {
+				// Initialize Cloudinary if not already done
+				if configs.CloudinaryClient == nil {
+					configs.InitCloudinary()
+				}
+
+				slug := news.Slug
+				if slug == "" {
+					slug = strings.ToLower(strings.Replace(payload.Title, " ", "-", -1))
+				}
+
+				// target upload directory in bucket
+				targetDir := configs.EnvCloudinaryDir() + "/news/" + slug
+				filename := slug + "_thumbnail_" + strconv.FormatInt(now, 10)
+
+				uploadResult, err := utils.UploadImageFromBase64(ctx, payload.Thumbnail, targetDir, filename)
+				if err != nil {
+					return c.JSON(http.StatusInternalServerError, responses.GlobalResponse{Status: http.StatusInternalServerError, Message: "Error uploading thumbnail", Data: &echo.Map{"error": err.Error()}})
+				}
+				thumbnailURL = uploadResult.SecureURL
+			} else {
+				// Already a URL, save as-is
+				thumbnailURL = payload.Thumbnail
+			}
+		}
+
 		new_data := bson.D{
 			{"title", payload.Title},
 			{"updated_on", now},
-			{"thumbnail", payload.Thumbnail},
+			{"thumbnail", thumbnailURL},
 			{"content", payload.Content},
 			{"tags", payload.Tags},
 			{"influencers", payload.Influencers},
